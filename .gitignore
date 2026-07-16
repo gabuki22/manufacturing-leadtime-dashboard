@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit 비밀키 (절대 커밋 금지)
+.streamlit/secrets.toml
+
+# ⚠️ data/ 는 절대 제외하지 말 것 — app.py가 읽는 합성 CSV.
+#    제외하면 배포 시 FileNotFoundError 발생 (Day4 교안 STEP 11 함정).
