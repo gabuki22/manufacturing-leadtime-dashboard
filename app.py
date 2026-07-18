@@ -35,7 +35,8 @@ st.markdown("**작성자 : 이기쁨**  ·  모두의연구소 **데이터기반
             "·  분석 근거 원본: 볼트 위키 `raw/학습/EDATA7기_이기쁨/`")
 st.divider()
 
-tab_diag, tab_plan = st.tabs(["🩺 납기 진단 — 왜 못 맞추나", "🗓️ 공정별 계획서 — 오늘 뭘 하나"])
+tab_diag, tab_plan, tab_order = st.tabs(
+    ["🩺 납기 진단 — 왜 못 맞추나", "🗓️ 공정별 계획서 — 오늘 뭘 하나", "📅 수주 납기 진단 — 애초에 가능한가"])
 
 # ══════════════════════════════════════════════════════════════════════
 # 탭1. 납기 진단 — 왜 못 맞추나 (6개 차트)
@@ -146,7 +147,7 @@ with tab_plan:
     st.divider()
     proc = st.radio("공정 선택", PROCS, horizontal=True)
     d = plans[plans.공정 == proc]
-    COLS = ["제품도번", "고객사", "차종", "색상", "수주수량", "출하납기",
+    COLS = ["제품도번", "고객사", "차종", "색상", "수주수량", "수주일", "출하납기",
             "착수목표일", "완료납기일", "현재진척", "일생산능력", "금일가능수량", "대기수량"]
 
     st.markdown(f"### 🟢 오늘 진행 — 앞공정 끝나 바로 작업 ({(d.상태 == '오늘 진행').sum()}건)")
@@ -178,3 +179,47 @@ with tab_plan:
                      .reset_index(drop=True), width="stretch", hide_index=True)
         st.warning(f"사내 {int(jig.사내로딩.sum()):,}개 처리 후 초과 "
                    f"**{int(jig.사외협력로딩.sum()):,}개**를 사외(협력) 로딩으로 이관")
+
+# ══════════════════════════════════════════════════════════════════════
+# 탭3. 수주 납기 진단 — 애초에 가능한 납기였나
+# ══════════════════════════════════════════════════════════════════════
+with tab_order:
+    diag = load("plan_수주납기진단")
+    st.caption("영업이 확보한 기간(**수주일 → 출하납기**)이 **전 공정 필요 리드타임**보다 짧으면, "
+               "생산은 시작부터 진다. 수주 접수 시점에 이미 불가능한 납기를 색출한다.")
+
+    vc = diag.납기판정.value_counts()
+    o1, o2, o3 = st.columns(3)
+    o1.metric("🟢 여유 (리드타임+3일↑)", f"{int(vc.get('여유', 0))}건")
+    o2.metric("🟡 빠듯 (여유 0~2일)", f"{int(vc.get('빠듯', 0))}건")
+    o3.metric("🔴 납기 부족(불가)", f"{int(vc.get('납기 부족(불가)', 0))}건", delta="수주 오류", delta_color="inverse")
+
+    st.subheader("확보기간 vs 필요 리드타임 — 대각선 위쪽 = 애초에 부족")
+    mx = int(max(diag.확보기간일.max(), diag.필요리드타임일.max())) + 1
+    fig = px.scatter(diag, x="확보기간일", y="필요리드타임일", color="납기판정",
+                     hover_data=["제품도번", "고객사", "수주수량", "수주일", "출하납기", "납기여유일"],
+                     color_discrete_map={"여유": "#2e7d32", "빠듯": "#f9a825", "납기 부족(불가)": "#c62828"},
+                     labels={"확보기간일": "확보기간(수주일→납기, 일)", "필요리드타임일": "전 공정 필요 리드타임(일)"})
+    fig.add_shape(type="line", x0=0, y0=0, x1=mx, y1=mx, line=dict(dash="dash", color="gray"))
+    fig.add_annotation(x=mx * 0.32, y=mx * 0.9, text="이 선 위 = 필요 > 확보 = 납기 부족",
+                       showarrow=False, font=dict(color="#c62828", size=13))
+    fig.update_traces(marker=dict(size=12, opacity=0.75))
+    fig.update_layout(font=dict(size=13), legend_title="")
+    st.plotly_chart(fig, width="stretch")
+
+    short = diag[diag.납기판정 == "납기 부족(불가)"]
+    st.markdown(f"### 🔴 접수 시점에 이미 불가능한 수주 ({len(short)}건)")
+    if len(short):
+        DCOLS = ["제품도번", "고객사", "차종", "수주수량", "수주일", "출하납기",
+                 "확보기간일", "필요리드타임일", "납기여유일"]
+        st.dataframe(short[DCOLS].reset_index(drop=True), width="stretch", hide_index=True)
+        st.error(f"이 {len(short)}건은 **수주일부터 계산해도 납기 < 필요 리드타임** — "
+                 "영업·생산 협의로 납기 재조정하거나, 접수 단계에서 걸러야 할 건")
+    else:
+        st.success("접수 시점에 불가능한 수주 없음 — 모든 납기가 리드타임을 확보")
+
+    with st.expander(f"🟡 빠듯한 수주 — 여유 0~2일 ({int(vc.get('빠듯', 0))}건, 변수 생기면 위험)"):
+        tight = diag[diag.납기판정 == "빠듯"]
+        st.dataframe(tight[["제품도번", "고객사", "수주수량", "수주일", "출하납기",
+                            "확보기간일", "필요리드타임일", "납기여유일"]].reset_index(drop=True),
+                     width="stretch", hide_index=True)
