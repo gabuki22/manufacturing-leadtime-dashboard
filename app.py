@@ -17,7 +17,9 @@ import streamlit as st
 
 DATA = Path(__file__).parent / "data"
 PROCS = ["사출", "지그삽입", "도장", "레이저", "인쇄", "출하검사"]
-STATUS_COLOR = {"오늘 진행": "#2e7d32", "앞공정 미완료 대기": "#c62828", "여유": "#9e9e9e"}
+STATUS_COLOR = {"오늘 진행": "#2e7d32", "부분 진행": "#f9a825",
+                "앞공정 미완료 대기": "#c62828", "여유": "#9e9e9e"}
+STATUS_ORDER = ["오늘 진행", "부분 진행", "앞공정 미완료 대기", "여유"]
 
 st.set_page_config(page_title="제조 납기 관리 대시보드", page_icon="🏭", layout="wide")
 
@@ -125,51 +127,74 @@ with tab_diag:
 with tab_plan:
     plans = load("plan_backward_전체")
     jig = load("plan_공정_지그삽입_로딩배분")
+    mat = load("plan_자재소요")
     base_day = plans.기준일.iloc[0]
-    st.caption(f"영업 출하납기에서 거꾸로 계산한 공정별 오늘 할 일 · 기준일 **{base_day}**")
+    st.caption(f"영업 출하납기에서 거꾸로 계산한 공정별 오늘 할 일 · 기준일 **{base_day}** · "
+               "오늘 실행량 = **앞 공정 재고 있는 만큼**(재고는 여러 공정에 나뉘어 있음)")
 
-    today = plans[plans.상태 == "오늘 진행"]
+    run = plans[plans.상태.isin(["오늘 진행", "부분 진행"])]
+    part = plans[plans.상태 == "부분 진행"]
     wait = plans[plans.상태 == "앞공정 미완료 대기"]
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("오늘 진행 가능", f"{len(today)}건")
-    k2.metric("금일 총 가능수량", f"{int(today.금일가능수량.sum()):,}개")
-    k3.metric("앞공정 미완료 대기", f"{len(wait)}건", delta="병목", delta_color="inverse")
-    k4.metric("지그삽입 사외(협력) 로딩", f"{int(jig.사외협력로딩.sum()):,}개")
+    k1.metric("오늘 생산 착수", f"{len(run)}건")
+    k2.metric("금일 총 생산량", f"{int(run.금일가능수량.sum()):,}개")
+    k3.metric("부분 진행(앞재고 부족)", f"{len(part)}건", delta="일부만", delta_color="inverse")
+    k4.metric("앞공정 미완료 대기", f"{len(wait)}건", delta="병목", delta_color="inverse")
 
     st.subheader("공정별 상태 분포 — 어디에 일이 몰려 있나")
     dist = plans.groupby(["공정", "상태"]).size().reset_index(name="건수")
     figd = px.bar(dist, x="공정", y="건수", color="상태", text="건수",
-                  category_orders={"공정": PROCS, "상태": ["오늘 진행", "앞공정 미완료 대기", "여유"]},
-                  color_discrete_map=STATUS_COLOR)
+                  category_orders={"공정": PROCS, "상태": STATUS_ORDER}, color_discrete_map=STATUS_COLOR)
     figd.update_layout(font=dict(size=13), legend_title="", barmode="stack")
     st.plotly_chart(figd, width="stretch")
 
     st.divider()
     proc = st.radio("공정 선택", PROCS, horizontal=True)
     d = plans[plans.공정 == proc]
-    COLS = ["제품도번", "고객사", "차종", "색상", "수주수량", "수주일", "출하납기",
-            "착수목표일", "완료납기일", "현재진척", "일생산능력", "금일가능수량", "대기수량"]
+    COLS = ["제품도번", "고객사", "차종", "색상", "수주수량", "수주일", "출하납기", "착수목표일",
+            "필요량", "앞공정재고", "일생산능력", "금일가능수량", "대기수량"]
 
-    st.markdown(f"### 🟢 오늘 진행 — 앞공정 끝나 바로 작업 ({(d.상태 == '오늘 진행').sum()}건)")
+    st.markdown(f"### 🟢 오늘 진행 — 앞재고로 전량 가능 ({(d.상태 == '오늘 진행').sum()}건)")
     dt = d[d.상태 == "오늘 진행"]
     if len(dt):
         st.dataframe(dt[COLS].reset_index(drop=True), width="stretch", hide_index=True)
-        st.success(f"금일 처리 가능 합계 **{int(dt.금일가능수량.sum()):,}개** (일캐파 한도 내)")
     else:
-        st.info("오늘 진행할 건이 없습니다.")
+        st.info("앞재고로 전량 가능한 건이 없습니다.")
 
-    st.markdown(f"### 🔴 앞공정 미완료 대기 — 아직 안 넘어옴 ({(d.상태 == '앞공정 미완료 대기').sum()}건)")
+    st.markdown(f"### 🟡 부분 진행 — 앞재고 있는 만큼만, 나머지 대기 ({(d.상태 == '부분 진행').sum()}건)")
+    dp = d[d.상태 == "부분 진행"]
+    if len(dp):
+        st.dataframe(dp[COLS + ["막힌공정"]].reset_index(drop=True), width="stretch", hide_index=True)
+        st.warning(f"이 {len(dp)}건은 **앞 공정 재고가 필요량보다 적어** 오늘은 {int(dp.금일가능수량.sum()):,}개만 "
+                   f"생산하고 **{int(dp.대기수량.sum()):,}개는 앞공정 대기** — 계획이 있어도 재고가 없으면 못 만든다")
+    else:
+        st.caption("부분 진행 없음.")
+
+    st.markdown(f"### 🔴 앞공정 미완료 대기 — 앞재고 0 ({(d.상태 == '앞공정 미완료 대기').sum()}건)")
     dw = d[d.상태 == "앞공정 미완료 대기"]
     if len(dw):
         st.dataframe(dw[COLS + ["막힌공정"]].reset_index(drop=True), width="stretch", hide_index=True)
         blk = " · ".join(f"**{k}** {v}건" for k, v in dw.막힌공정.value_counts().items())
-        st.error(f"막힌 공정: {blk} — 이 공정들이 끝나야 오자마자 착수 가능")
+        st.error(f"막힌 공정: {blk} — 이 공정들이 끝나야 착수 가능")
     else:
         st.caption("앞공정 미완료 대기 없음.")
 
     with st.expander(f"⚪ 여유 — 역산 착수일이 아직 미래 ({(d.상태 == '여유').sum()}건)"):
         dv = d[d.상태 == "여유"].sort_values("착수목표일")
         st.dataframe(dv[COLS + ["여유일"]].reset_index(drop=True), width="stretch", hide_index=True)
+
+    # 선택 공정의 오늘 자재 소요 (BOM × 오늘 생산량)
+    md = mat[mat.공정 == proc]
+    if len(md):
+        st.divider()
+        st.markdown(f"### 📦 {proc} 오늘 자재 소요 — BOM × 금일 생산량")
+        agg = (md.groupby(["자재구분", "자재명", "소모구분", "단위"]).소요량.sum().round(1)
+               .reset_index().sort_values("소요량", ascending=False))
+        st.dataframe(agg.reset_index(drop=True), width="stretch", hide_index=True)
+        somo = agg[agg.소모구분 == "소모"]
+        if len(somo):
+            top = somo.iloc[0]
+            st.info(f"오늘 {proc} 생산에 **{top.자재구분} {top.소요량:,}{top.단위}** 등 소모 — 자재 재고와 대조해 발주 판단")
 
     if proc == "지그삽입":
         st.divider()
