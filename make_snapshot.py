@@ -124,7 +124,10 @@ def main():
         df = q(sql)
         df.to_csv(DATA / f"{name}.csv", index=False, encoding="utf-8-sig")
         print(f"  ✔ {name:24} {len(df):>4}행")
-    print("\n스냅샷 파이프라인 완료 — BigQuery 원천 기준으로 data/ 재생성됨")
+    # 스냅샷 기준일 스탬프 — 배지에 "몇 월 며칠 기준" 표기용 (DEPLOY 교안 p3·p5: 한계 명시의 코드화)
+    import datetime
+    (DATA / "_snapshot_date.txt").write_text(datetime.date.today().isoformat(), encoding="utf-8")
+    print("\n스냅샷 파이프라인 완료 — BigQuery 원천 기준으로 data/ 재생성됨 (기준일 스탬프 포함)")
 
 
 if __name__ == "__main__":

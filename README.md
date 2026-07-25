@@ -53,6 +53,11 @@ DEPLOY.md         배포 가이드 (라이브/스냅샷 폴백·Python 3.12)
 
 ## 배포 (Streamlit Community Cloud)
 
+**🌐 라이브: https://manufacturing-leadtime-dashboard-gapg8weeptkgdhv8ywvmkt.streamlit.app/**
+
+최종 점검(교안 5항목): ✅접속 ✅지표 카드 ✅차트+툴팁 ✅한글 ⬜모바일(확인 예정)
+
+
 `DEPLOY.md` 참고 — GitHub **public** push → [share.streamlit.io](https://share.streamlit.io) → Create app → Main file path `app.py` → **Advanced settings에서 Python 3.12** → Deploy. BigQuery 인증이 없어도 🟡 스냅샷으로 정상 동작합니다.
 
 ## 데이터에 대하여

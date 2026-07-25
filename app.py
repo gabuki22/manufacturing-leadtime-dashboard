@@ -63,10 +63,11 @@ st.title("🏭 제조 납기·품질 실무 대시보드")
 st.caption("내 현장 문제(도장 병목·수주 납기·잔업·불량)를 **강의·대기업이 검증한 기법**으로 푼다 · "
            "사출 → 지그삽입 → 도장 → 레이저 → 인쇄 → 출하검사 · **데이터 전부 가공(합성)**")
 st.markdown("**작성자 : 이기쁨**  ·  모두의연구소 **데이터기반의사결정 7기**  ·  분석 근거 원본: 볼트 위키 `raw/학습/EDATA7기_이기쁨/`")
+_snap_date = (DATA / "_snapshot_date.txt").read_text(encoding="utf-8").strip() if (DATA / "_snapshot_date.txt").exists() else "미기록"
 if _bq_live():
-    st.caption("🟢 **BigQuery 라이브 연결됨** — `make_snapshot.py`로 원천에서 스냅샷 최신화 · BigQuery(wiki_manufacturing) → 스냅샷 CSV → 대시보드")
+    st.caption(f"🟢 **BigQuery 라이브 연결됨** — `make_snapshot.py`로 원천에서 스냅샷 최신화(현 스냅샷 기준 {_snap_date}) · BigQuery(wiki_manufacturing) → 스냅샷 CSV → 대시보드")
 else:
-    st.caption("🟡 **스냅샷 모드**(배포 안전) — 사전 계산 스냅샷 사용, BigQuery 인증 없어도 정상 렌더")
+    st.caption(f"🟡 **스냅샷 데이터 ({_snap_date} 기준)** — 배포 환경에 BigQuery 인증 정보가 없어 그 시점 데이터로 표시 중 · 인증 없어도 정상 렌더(배포 안전)")
 st.divider()
 
 tab_diag, tab_plan, tab_order, tab_qual, tab_report = st.tabs(
