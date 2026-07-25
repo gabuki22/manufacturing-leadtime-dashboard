@@ -82,6 +82,19 @@ MFG_Q = {
         'SELECT "색상" AS axis, ROUND(MAX(r)/MIN(r),1) AS ratio, ROUND(MAX(r)*100,2) AS top_rate FROM color_r '
         'UNION ALL SELECT "고객사", ROUND(MAX(r)/MIN(r),1), ROUND(MAX(r)*100,2) FROM cust_r '
         'UNION ALL SELECT "호기라인", ROUND(MAX(r)/MIN(r),1), ROUND(MAX(r)*100,2) FROM line_r ORDER BY ratio DESC',
+    "defect_cause_breakdown":
+        'WITH j AS (SELECT d.`불량유형` AS dtype, d.`원인구분` AS cause, d.`불량수량` AS q, m.`색상` AS color '
+        'FROM `wiki_manufacturing.defect_detail` d JOIN `wiki_manufacturing.master` m ON d.`제품도번`=m.`제품도번`) '
+        'SELECT "전체" AS seg, dtype, cause, SUM(q) AS q, ROUND(100*SUM(q)/SUM(SUM(q)) OVER (PARTITION BY 1),1) AS pct '
+        'FROM j GROUP BY dtype, cause '
+        'UNION ALL SELECT "블랙", dtype, cause, SUM(q), ROUND(100*SUM(q)/SUM(SUM(q)) OVER (PARTITION BY 2),1) '
+        'FROM j WHERE color="블랙" GROUP BY dtype, cause ORDER BY seg, q DESC',
+    "overtime_volume_control":
+        'WITH j AS (SELECT p.overtime_yn, p.prod_qty, q.inspect_qty, q.defect_qty, '
+        'NTILE(3) OVER (ORDER BY p.prod_qty) AS tier '
+        'FROM `manufacturing.production` p JOIN `manufacturing.quality` q ON p.production_id=q.production_id) '
+        'SELECT tier, overtime_yn, COUNT(*) AS lots, ROUND(100.0*SUM(defect_qty)/SUM(inspect_qty),2) AS defect_rate '
+        'FROM j GROUP BY tier, overtime_yn ORDER BY tier, overtime_yn',
 }
 
 # ── 제조 원천 스냅샷 (기존 wiki_manufacturing 원천 → data/*.csv, 한글 테이블명 그대로) ──
