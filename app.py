@@ -4,7 +4,8 @@
 강의 실습(CS)은 걷어낸 실무 전용. 각 기법에 검증 출처 배지를 달았다(대기업 기술블로그·학술 원전).
 탭(사이드바 = 배운 시간순): 납기 진단 / 공정별 계획서 / 수주 납기 진단 / 품질·불량 분석 /
 리포트 / 설비 불량 / 변동 대응
-데이터 전부 가공(합성) · BigQuery 원천 → 스냅샷 파이프라인(make_snapshot.py).
+데이터 전부 가공(합성). 대부분은 BigQuery 원천 → 스냅샷(make_snapshot.py)이지만,
+4주차 Day5 산출물(변동 대응·설비 불량)은 로컬 생성기가 만든 CSV라 BigQuery를 거치지 않는다.
 """
 from pathlib import Path
 
@@ -74,9 +75,9 @@ st.caption("내 현장 문제(도장 병목·수주 납기·잔업·불량)를 *
 st.markdown("**작성자 : 이기쁨**  ·  모두의연구소 **데이터기반의사결정 7기**  ·  분석 근거 원본: 볼트 위키 `raw/학습/EDATA7기_이기쁨/`")
 _snap_date = (DATA / "_snapshot_date.txt").read_text(encoding="utf-8").strip() if (DATA / "_snapshot_date.txt").exists() else "미기록"
 if _bq_live():
-    st.caption(f"🟢 **BigQuery 라이브 연결됨** — `make_snapshot.py`로 원천에서 스냅샷 최신화(현 스냅샷 기준 {_snap_date}) · BigQuery(wiki_manufacturing) → 스냅샷 CSV → 대시보드")
+    st.caption(f"🟢 **BigQuery 라이브 연결됨** — BigQuery(wiki_manufacturing) → 스냅샷 CSV → 대시보드 (현 스냅샷 기준 {_snap_date}) · ⚠️ **⚡ 변동 대응·⚙️ 설비 불량은 예외** — 로컬 생성기가 만든 CSV로 직접 그린다(BigQuery 미적재)")
 else:
-    st.caption(f"🟡 **스냅샷 데이터 ({_snap_date} 기준)** — 배포 환경에 BigQuery 인증 정보가 없어 그 시점 데이터로 표시 중 · 인증 없어도 정상 렌더(배포 안전)")
+    st.caption(f"🟡 **스냅샷 데이터 ({_snap_date} 기준)** — 배포 환경에 BigQuery 인증 정보가 없어 그 시점 데이터로 표시 중 · **⚡ 변동 대응·⚙️ 설비 불량**은 BigQuery를 거치지 않은 로컬 생성 CSV(2026-08-01)")
 st.divider()
 
 # ── 왼쪽 사이드바 네비게이션 (탭 7개가 가로로 넘쳐 스크롤되던 문제 해소)
