@@ -6,4 +6,4 @@ statsmodels>=0.14
 # 로컬 make_snapshot.py 전용 (배포엔 불필요 — 앱은 BigQuery 인증 없으면 스냅샷 자동 폴백)
 # google-cloud-bigquery>=3.0
 # db-dtypes>=1.0
-# full rebuild trigger 2026-08-01 (hot-reload가 st.cache_data를 유지해 구 CSV가 표시되던 문제)
+# full rebuild trigger r2 2026-08-01 (P1 도번 결합 + P2 전달률)

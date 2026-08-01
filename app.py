@@ -595,8 +595,12 @@ if page == "var":
             f"다만 건수는 **{kind.sort_values('총밀림일', ascending=False).삽입구분.iloc[0]}**가 많아 "
             f"총 밀림일은 {kind.sort_values('총밀림일', ascending=False).총밀림일.iloc[0]}일로 더 크다 — "
             "**1건당 충격이 큰 것과 전체 손실이 큰 것은 다르다.** 줄일 대상은 후자, 예방할 대상은 전자.")
-    st.caption(f"※ 삽입 이력은 {len(insr)}건으로 표본이 작다(confidence 낮음). "
-               "또 도번 정보가 없어 **월 단위로만** 다른 데이터와 결합된다 — 특정 수주가 이 삽입 때문에 밀렸는지는 알 수 없다.")
+    _ov = (f"같은 도번·월에 삽입이 겹친 수주 {int(vsum.삽입겹침수주)}/{int(vsum.삽입창수주)}건 — "
+           f"겹침 납기초과 {vsum.삽입겹침초과율*100:.0f}% vs 무삽입 {vsum.무삽입초과율*100:.0f}%"
+           if pd.notna(vsum.get("삽입겹침초과율")) else "겹침 표본 부족")
+    st.caption(f"※ 삽입 {len(insr)}건(confidence 낮음). **P1(8/1)로 도번 확보 → 수주 단위 결합 가능**: {_ov}. "
+               f"창 3개월 표본이라 방향 참고용. · **P2 전달률 {vsum.전달률:.2f}**(주별 접수 CV {vsum.접수CV:.2f} → 납기 CV {vsum.납기CV:.2f}) — "
+               f"{'1 미만 = 납기 분산이 완충' if vsum.전달률 < 1 else '1 이상 = 몰림이 증폭'} · 합성 납기 가정 위의 값")
 
     st.subheader("④ 이 숫자를 믿어도 되는가 (Validate)")
     ref_badge("겹치는 구간 대조 — 새 데이터를 기존 시스템에 붙이기 전에 양쪽에 있는 기간으로 값을 맞춰본다")
