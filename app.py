@@ -79,14 +79,14 @@ else:
 st.divider()
 
 # ── 왼쪽 사이드바 네비게이션 (탭 7개가 가로로 넘쳐 스크롤되던 문제 해소)
-PAGES = {
-    "var": "⚡ 변동 대응",
+PAGES = {  # 시간순(강의 진도 오름차순) 정렬 — 2026-08-01 기쁨님 지시. 최신 산출물이 맨 아래.
     "diag": "🩺 납기 진단",
     "plan": "🗓️ 공정별 계획서",
     "order": "📅 수주 납기 진단",
     "qual": "🔬 품질·불량 분석",
-    "equip": "⚙️ 설비 불량",
     "report": "📄 리포트",
+    "equip": "⚙️ 설비 불량",
+    "var": "⚡ 변동 대응",
 }
 SUBTITLE = {
     "var": "무엇이 납기를 흔드나",
@@ -148,7 +148,7 @@ if page == "diag":
     fig1 = px.bar(cdf, x="공정", y="일생산능력", color="구분", log_y=True, text="일생산능력",
                   color_discrete_map={"가장 느림": "crimson", "여유": "lightslategray"},
                   labels={"일생산능력": "일생산능력 (개/일 · 로그축)"})
-    fig1.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig1.update_traces(texttemplate="%{text:,}", textposition="outside", cliponaxis=False)
     st.plotly_chart(fig1, width="stretch")
 
     st.subheader("② 그 공정의 능력은 장부와 실사가 같은가")
@@ -158,7 +158,7 @@ if page == "diag":
     fig2 = px.bar(jdf, x="기준", y="도장 일캐파", color="기준", text="도장 일캐파", hover_data=["지그 수"],
                   color_discrete_map={"장부 지그 기준": "lightslategray", "실사 지그 기준": "crimson"},
                   labels={"도장 일캐파": "도장 일캐파 (개/일)"})
-    fig2.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig2.update_traces(texttemplate="%{text:,}", textposition="outside", cliponaxis=False)
     fig2.update_layout(showlegend=False)
     st.plotly_chart(fig2, width="stretch")
     st.caption("실사 캐파가 장부보다 낮다 → 병목의 실제 원인은 설비가 아니라 **지그 관리**일 수 있다(무비용 개선 여지).")
@@ -205,7 +205,7 @@ if page == "diag":
                   color_discrete_map={"가장 많이 쌓임": "crimson", "일반": "lightslategray"},
                   category_orders={"단계": [s.replace("재고_", "") for s in stages]},
                   labels={"단계": "재고 파이프라인 9단계 (공정 순서)", "재고수량": "누적 재고 수량"})
-    fig6.update_traces(texttemplate="%{text:,}", textposition="outside")
+    fig6.update_traces(texttemplate="%{text:,}", textposition="outside", cliponaxis=False)
     st.plotly_chart(fig6, width="stretch")
 
 # ══════════════════════════════════════════════════════════════════════
@@ -359,7 +359,7 @@ if page == "qual":
     for grp, color in [("정상일", "lightslategray"), ("잔업일", "crimson")]:
         subp = ot_proc[ot_proc.구분 == grp]
         figC.add_bar(x=subp.공정, y=subp.불량률.round(1), name=grp, text=subp.불량률.round(1), marker_color=color, row=1, col=2)
-    figC.update_traces(textposition="outside")
+    figC.update_traces(textposition="outside", cliponaxis=False)
     figC.update_layout(height=360)
     st.plotly_chart(figC, width="stretch")
     st.error("잔업일 2.7% vs 정상일 2.0%(**p<0.0001**). 도장·레이저 둘 다 잔업일이 높아 공정 구성 탓(교란변수)이 아니다. "
@@ -378,7 +378,7 @@ if page == "qual":
     figSp.add_bar(x=sb.customer, y=sb.black_rate.round(1), text=sb.black_rate.round(1),
                   marker_color=["crimson" if c == sb.customer.iloc[0] else "lightslategray" for c in sb.customer],
                   row=1, col=2, showlegend=False)
-    figSp.update_traces(textposition="outside")
+    figSp.update_traces(textposition="outside", cliponaxis=False)
     figSp.update_layout(height=360)
     st.plotly_chart(figSp, width="stretch")
     st.error("전체는 **D사 1위(2.1%)** — 하지만 D사는 블랙 100% 주문사. 블랙만 보면 **A사 1위(3.0%)로 역전**. "
@@ -389,7 +389,7 @@ if page == "qual":
     ma = load("multiaxis_defect")
     figMa = px.bar(ma, x="axis", y="ratio", text="ratio",
                    labels={"axis": "세그 축", "ratio": "변별력 (최고÷최저 불량률, 배)"})
-    figMa.update_traces(marker_color=["crimson" if a == "색상" else "lightslategray" for a in ma.axis], textposition="outside")
+    figMa.update_traces(marker_color=["crimson" if a == "색상" else "lightslategray" for a in ma.axis], textposition="outside", cliponaxis=False)
     figMa.update_layout(height=320)
     st.plotly_chart(figMa, width="stretch")
     st.warning("**색상 축이 변별력 2.2배로 최고**(블랙). 불량 '수량'이 아니라 **'률'로 쪼개니** 물량 착시가 걷힌다 — "
@@ -439,7 +439,7 @@ if page == "equip":
                  marker_color=["crimson" if h == worst else "lightslategray" for h in g.호기])
     figE.add_bar(x=g.호기, y=g.단순평균, name="단순평균 (월별 평균)", text=g.단순평균,
                  marker_color="#5AA6D8", opacity=0.55)
-    figE.update_traces(textposition="outside", texttemplate="%{text:.2f}")
+    figE.update_traces(textposition="outside", cliponaxis=False, texttemplate="%{text:.2f}")
     figE.update_layout(barmode="group", height=380, yaxis_title="불량률 (%)",
                        legend=dict(orientation="h", y=1.12, x=0))
     st.plotly_chart(figE, width="stretch")
@@ -452,7 +452,7 @@ if page == "equip":
     figS = px.scatter(g, x="투입", y="가중평균", text="호기", size="투입", size_max=42,
                       color=g.개월.astype(str), labels={"투입": "총 투입 수량 (개)", "가중평균": "불량률 (%)",
                                                        "color": "관측 개월"})
-    figS.update_traces(textposition="top center")
+    figS.update_traces(textposition="top center", cliponaxis=False)
     figS.add_vline(x=g.투입.median() * 0.2, line_dash="dot", line_color="#F5A85B",
                    annotation_text="표본 하한선 (중앙값의 20%)", annotation_position="top")
     figS.update_layout(height=380)
@@ -546,7 +546,7 @@ if page == "var":
                                                     for v in imp.변동},
                   hover_data=["산출근거", "표본", "confidence"],
                   labels={"영향일수": "납기를 갉아먹는 일수 (일)", "변동": ""})
-    figV.update_traces(texttemplate="%{text:.1f}일", textposition="outside")
+    figV.update_traces(texttemplate="%{text:.1f}일", textposition="outside", cliponaxis=False)
     figV.update_layout(showlegend=False, height=300)
     st.plotly_chart(figV, width="stretch")
     st.dataframe(imp[["변동", "영향일수", "산출근거", "표본", "confidence"]],
@@ -569,7 +569,7 @@ if page == "var":
                  marker_color=["lightslategray", "lightslategray", "crimson"], row=1, col=1, showlegend=False)
     figA.add_bar(x=fcq.변동성구간, y=fcq.여유일, text=fcq.여유일,
                  marker_color=["seagreen", "lightslategray", "crimson"], row=1, col=2, showlegend=False)
-    figA.update_traces(textposition="outside")
+    figA.update_traces(textposition="outside", cliponaxis=False)
     figA.update_layout(height=330)
     st.plotly_chart(figA, width="stretch")
     st.warning(f"예보 불안정군 착수 {fcq.착수LT.iloc[-1]:.1f}일 vs 안정군 {fcq.착수LT.iloc[0]:.1f}일 — "
@@ -588,7 +588,7 @@ if page == "var":
                   color_discrete_map={k: ("crimson" if k == kind.삽입구분.iloc[0] else "lightslategray")
                                       for k in kind.삽입구분},
                   labels={"평균밀림": "삽입 1건당 평균 밀림 일수 (일)"})
-    figC.update_traces(texttemplate="%{text:.2f}일", textposition="outside")
+    figC.update_traces(texttemplate="%{text:.2f}일", textposition="outside", cliponaxis=False)
     figC.update_layout(showlegend=False, height=320)
     st.plotly_chart(figC, width="stretch")
     st.info(f"**{kind.삽입구분.iloc[0]}가 1건당 {kind.평균밀림.iloc[0]:.2f}일**로 가장 크게 민다. "
