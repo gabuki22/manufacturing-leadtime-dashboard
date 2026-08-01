@@ -70,9 +70,11 @@ else:
     st.caption(f"🟡 **스냅샷 데이터 ({_snap_date} 기준)** — 배포 환경에 BigQuery 인증 정보가 없어 그 시점 데이터로 표시 중 · 인증 없어도 정상 렌더(배포 안전)")
 st.divider()
 
-tab_diag, tab_plan, tab_order, tab_qual, tab_report = st.tabs(
-    ["🩺 납기 진단 — 왜 못 맞추나", "🗓️ 공정별 계획서 — 오늘 뭘 하나",
+tab_var, tab_diag, tab_plan, tab_order, tab_qual, tab_equip, tab_report = st.tabs(
+    ["⚡ 변동 대응 — 무엇이 납기를 흔드나",
+     "🩺 납기 진단 — 왜 못 맞추나", "🗓️ 공정별 계획서 — 오늘 뭘 하나",
      "📅 수주 납기 진단 — 애초에 가능한가", "🔬 품질·불량 분석 — 진짜 원인은 무엇인가",
+     "⚙️ 설비 불량 — 어느 호기를 먼저 점검하나",
      "📄 리포트 — 결론"])
 
 with tab_report:
@@ -346,3 +348,164 @@ with tab_qual:
     st.plotly_chart(figMa, width="stretch")
     st.warning("**색상 축이 변별력 2.2배로 최고**(블랙). 불량 '수량'이 아니라 **'률'로 쪼개니** 물량 착시가 걷힌다 — "
                "PPM 개선은 색상(블랙)부터. 호기라인(1.0배)은 변별력 없음 = 불량 원인 아님.")
+
+with tab_equip:
+    st.caption("호기별 투입 대비 손실로 **점검 우선순위**를 정한다. 순위표 하나로 끝내지 않고 "
+               "**가중평균·표본·공통원인** 세 관문을 통과시킨다 — 셋 중 하나만 빠져도 엉뚱한 설비를 뜯게 된다.")
+    st.info("**측정 대상이 품질·불량 탭과 다르다.** 여기는 `투입 대비 손실`(공정 단위)이고, "
+            "품질 탭 ③의 '호기라인 변별력 없음'은 `검사에서 판정된 제품 불량`(defect_detail) 기준이다. "
+            "서로 다른 질문에 답하는 두 데이터라 결론이 달라도 모순이 아니다. "
+            "불량률 정의 = **불량수량 ÷ 투입**(재작업 제외) — 원본이 쓰는 정의와 대조해 확정했다.")
+
+    eq = load("equipment_production")
+    tot_in, tot_def = int(eq.투입.sum()), int(eq.불량수량.sum())
+    by_m = eq.groupby("월").apply(lambda g: g.불량수량.sum() / g.투입.sum() * 100)
+    worsened = (eq[eq.월 != eq.월.min()].groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())
+                > eq[eq.월 == eq.월.min()].groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())).sum()
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("총 투입 / 불량", f"{tot_in:,}개", f"불량 {tot_def:,}개 ({tot_def/tot_in*100:.2f}%)")
+    c2.metric("불량률 추세", f"{by_m.iloc[-1]:.2f}%", f"{by_m.iloc[-1]-by_m.iloc[0]:+.2f}%p (3개월)")
+    c3.metric("동시 악화 호기", f"{int(worsened)} / {eq.호기.nunique()}", "특정 설비 아닌 공통 원인 신호", delta_color="inverse")
+
+    st.subheader("① 순위를 정하는 방법이 결론을 바꾼다 (가중평균 vs 단순평균)")
+    ref_badge("가중평균 — 로트 크기가 다르면 단순 평균이 작은 로트를 과대 반영(제조 통계의 기본)")
+    g = eq.groupby(["라인", "호기"]).agg(투입=("투입", "sum"), 불량=("불량수량", "sum"),
+                                       개월=("월", "nunique")).reset_index()
+    g["가중평균"] = (g.불량 / g.투입 * 100).round(2)
+    g["단순평균"] = (eq.groupby(["라인", "호기"]).불량률.mean().values * 100).round(2)
+    g = g.sort_values("가중평균", ascending=False)
+    worst = g.호기.iloc[0]
+
+    figE = go.Figure()
+    figE.add_bar(x=g.호기, y=g.가중평균, name="가중평균 (총불량÷총투입)", text=g.가중평균,
+                 marker_color=["crimson" if h == worst else "lightslategray" for h in g.호기])
+    figE.add_bar(x=g.호기, y=g.단순평균, name="단순평균 (월별 평균)", text=g.단순평균,
+                 marker_color="#5AA6D8", opacity=0.55)
+    figE.update_traces(textposition="outside", texttemplate="%{text:.2f}")
+    figE.update_layout(barmode="group", height=380, yaxis_title="불량률 (%)",
+                       legend=dict(orientation="h", y=1.12, x=0))
+    st.plotly_chart(figE, width="stretch")
+    st.warning(f"투입량이 최대 **{g.투입.max()/g.투입.min():.0f}배** 차이(가장 큰 호기 {g.투입.max():,} vs 가장 작은 {g.투입.min():,}). "
+               "이만큼 벌어지면 단순 평균은 **작은 호기의 값을 과대 반영**해 중위권 순위가 뒤바뀐다. "
+               "점검 순번은 **가중평균** 기준으로 읽어야 한다.")
+
+    st.subheader("② 1위를 믿어도 되는가 (표본 확인)")
+    ref_badge("표본 크기 판단 — 분모가 작으면 순위가 맞아도 결론을 내리지 않는다(3주차 원칙 재적용)")
+    figS = px.scatter(g, x="투입", y="가중평균", text="호기", size="투입", size_max=42,
+                      color=g.개월.astype(str), labels={"투입": "총 투입 수량 (개)", "가중평균": "불량률 (%)",
+                                                       "color": "관측 개월"})
+    figS.update_traces(textposition="top center")
+    figS.add_vline(x=g.투입.median() * 0.2, line_dash="dot", line_color="#F5A85B",
+                   annotation_text="표본 하한선 (중앙값의 20%)", annotation_position="top")
+    figS.update_layout(height=380)
+    st.plotly_chart(figS, width="stretch")
+    small = g[(g.개월 < g.개월.max()) | (g.투입 < g.투입.median() * 0.2)]
+    if len(small):
+        names = " · ".join(f"**{r.호기}**(투입 {int(r.투입):,}·{int(r.개월)}개월·{r.가중평균}%)" for _, r in small.iterrows())
+        st.error(f"{names} 는 **표본이 부족해 판정 보류**. 왼쪽 아래 점선 왼편은 분모가 작아 몇 건 차이로 순위가 뒤집힌다. "
+                 "신규 설비는 초기 안정화 기간에 불량이 높은 것이 정상이라, 이 숫자로 최우선 점검을 결정하면 오판이다.")
+
+    st.subheader("③ 특정 호기 문제인가, 전체가 같이 나빠졌는가")
+    ref_badge("공통원인 vs 특수원인 — 슈하트/데밍 관리도의 기본 구분. 공통원인을 개별 설비로 처리하면 개선이 안 된다")
+    piv = eq.pivot_table(index="호기", columns="월", values="불량수량", aggfunc="sum") / \
+          eq.pivot_table(index="호기", columns="월", values="투입", aggfunc="sum") * 100
+    first, last = piv.columns[0], piv.columns[-1]
+    piv = piv.sort_values(last, ascending=False)
+    figT = go.Figure()
+    for h in piv.index:
+        vals = piv.loc[h]
+        figT.add_scatter(x=list(piv.columns), y=vals, mode="lines+markers", name=h,
+                         line=dict(width=3 if h in small.호기.values or h == worst else 1.5,
+                                   color="crimson" if h == worst else None))
+    figT.update_layout(height=400, yaxis_title="불량률 (%)", legend=dict(orientation="h", y=-0.15))
+    st.plotly_chart(figT, width="stretch")
+    st.error(f"**{int(worsened)}/{eq.호기.nunique()} 호기가 동시에 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
+             "특정 설비 고장이라면 한둘만 튀어야 하는데 전부 같이 올랐다 — **자재 로트·환경·작업조건 같은 공통 원인**을 먼저 의심해야 한다. "
+             "순위표만 보고 1위 설비를 뜯으면, 뜯고 나서도 나머지 호기의 불량률은 그대로다.")
+
+    st.success(f"**점검 우선순위** ① 공통 원인 조사(동시 악화 {int(worsened)}대) — *confidence 중간, 상관은 명확하나 원인 미확인* "
+               f"② {' · '.join(g[~g.호기.isin(small.호기)].호기.head(2).tolist())} — 공통 상승분을 빼도 가장 큼 "
+               f"③ {' · '.join(small.호기.tolist()) if len(small) else '없음'} — 관측만, 판정 보류")
+
+# ══════════════════════════════════════════════════════════════════════
+# 탭0. 변동 대응 — 나의 분석 워크플로우 Define에 직접 답하는 페이지
+# ══════════════════════════════════════════════════════════════════════
+with tab_var:
+    st.markdown("### ❓ 우리 납기를 실제로 흔드는 변동은 셋 중 무엇이고, 각각에 대응할 시간이 얼마나 남아 있는가?")
+    st.caption("계획을 흔드는 변수 셋 — **A 발주 변동**(주 단위 접수량이 크게 출렁) · **B 리드타임 변동**(자재·설비 문제 시 길어짐) · "
+               "**C 계획 외 삽입**(품질 대체품·개발품이 계획과 무관하게 끼어듦). "
+               "셋 중 무엇부터 손볼지 정하는 것이 이 페이지의 목적이다 — 셋 다 동시에 할 수 없다.")
+
+    imp, fcq = load("variation_impact"), load("variation_forecast")
+    ords, insr = load("variation_orders"), load("variation_insertions")
+
+    st.warning("⚠️ **데이터 한계를 먼저 밝힌다.** 이 페이지는 **합성 데이터** 기준이고, "
+               "생산 리드타임 중앙값이 **11일**로 나온다 — 현장 실측 **3~5일**과 크게 다르다. "
+               "합성 시 리드타임 파라미터를 실제에 맞추지 않은 결과이지 발견이 아니다. "
+               "**변동 간 상대 크기 비교**는 유효하나, **절대 일수는 실데이터로 재계산해야 한다.**")
+
+    c1, c2, c3 = st.columns(3)
+    top = imp.sort_values("영향일수", ascending=False).iloc[0]
+    c1.metric("가장 큰 변동 요인", top.변동.split()[0] + " " + top.변동.split()[1],
+              f"{top.영향일수:.1f}일 영향", delta_color="inverse")
+    c2.metric("세 변동 합계", f"{imp.영향일수.sum():.1f}일", "납기를 갉아먹는 총량", delta_color="inverse")
+    c3.metric("착수 시점 여유(중앙값)", f"{ords.여유일.median():.0f}일", f"납기 초과율 {ords.납기초과.mean()*100:.1f}%")
+
+    st.subheader("① 셋 중 무엇이 가장 크게 흔드는가")
+    ref_badge("영향도 우선순위 — 원인이 여럿일 때 크기 순으로 조준한다(파레토 원칙의 기본형)")
+    imps = imp.sort_values("영향일수")
+    figV = px.bar(imps, x="영향일수", y="변동", orientation="h", text="영향일수",
+                  color="변동", color_discrete_map={v: ("crimson" if v == top.변동 else "lightslategray")
+                                                    for v in imp.변동},
+                  hover_data=["산출근거", "표본", "confidence"],
+                  labels={"영향일수": "납기를 갉아먹는 일수 (일)", "변동": ""})
+    figV.update_traces(texttemplate="%{text:.1f}일", textposition="outside")
+    figV.update_layout(showlegend=False, height=300)
+    st.plotly_chart(figV, width="stretch")
+    st.dataframe(imp[["변동", "영향일수", "산출근거", "표본", "confidence"]],
+                 width="stretch", hide_index=True)
+    st.error(f"**A(발주 변동)가 {top.영향일수:.1f}일로 가장 크다** — B의 {imp[imp.변동.str.startswith('B')].영향일수.iloc[0]:.1f}일, "
+             f"C의 {imp[imp.변동.str.startswith('C')].영향일수.iloc[0]:.1f}일보다 크다. "
+             "**설비·자재보다 '무엇을 언제 만들지가 흔들리는 것'이 더 큰 문제**라는 뜻이다. "
+             "다만 셋은 그레인이 달라(수주/수주/삽입건) 같은 축에 놓은 **근사 비교**이며, 인과가 아니라 크기 비교용이다.")
+
+    st.subheader("② A — 발주 예보가 흔들리면 착수가 늦어진다")
+    ref_badge("층화 비교 — 변동성 3분위로 나눠 다른 조건을 고르게 만든 뒤 비교(교란변수 통제)")
+    figA = make_subplots(rows=1, cols=2, subplot_titles=("착수 리드타임 (접수→착수)", "착수 시점 남은 여유"))
+    figA.add_bar(x=fcq.변동성구간, y=fcq.착수LT.round(1), text=fcq.착수LT.round(1),
+                 marker_color=["lightslategray", "lightslategray", "crimson"], row=1, col=1, showlegend=False)
+    figA.add_bar(x=fcq.변동성구간, y=fcq.여유일, text=fcq.여유일,
+                 marker_color=["seagreen", "lightslategray", "crimson"], row=1, col=2, showlegend=False)
+    figA.update_traces(textposition="outside")
+    figA.update_layout(height=330)
+    st.plotly_chart(figA, width="stretch")
+    st.error(f"예보가 **불안정한 도번은 착수가 {fcq.착수LT.iloc[-1]:.1f}일**로 안정군({fcq.착수LT.iloc[0]:.1f}일)의 "
+             f"**{fcq.착수LT.iloc[-1]/fcq.착수LT.iloc[0]:.1f}배**. 남은 여유도 {fcq.여유일.iloc[0]:.0f}일 → {fcq.여유일.iloc[-1]:.0f}일로 줄고, "
+             f"납기 초과율은 0% → {fcq.납기초과율.iloc[-1]*100:.0f}%로 오른다. "
+             "**설비를 늘려도 이 지연은 안 줄어든다 — 언제 만들지 정해지지 않아 못 시작한 시간이기 때문이다.**")
+
+    st.subheader("③ C — 무엇이 끼어들어 며칠을 밀어내는가")
+    ref_badge("사건 기록 — 끼어든 순간을 남기지 않으면 '왜 늦었나'를 나중에 설명할 수 없다(4주D1 상태 vs 사건)")
+    kind = (insr.groupby("삽입구분").agg(건수=("밀림일수", "size"), 평균밀림=("밀림일수", "mean"),
+                                       총밀림일=("밀림일수", "sum")).reset_index()
+            .sort_values("평균밀림", ascending=False))
+    figC = px.bar(kind, x="삽입구분", y="평균밀림", text="평균밀림", hover_data=["건수", "총밀림일"],
+                  color="삽입구분",
+                  color_discrete_map={k: ("crimson" if k == kind.삽입구분.iloc[0] else "lightslategray")
+                                      for k in kind.삽입구분},
+                  labels={"평균밀림": "삽입 1건당 평균 밀림 일수 (일)"})
+    figC.update_traces(texttemplate="%{text:.2f}일", textposition="outside")
+    figC.update_layout(showlegend=False, height=320)
+    st.plotly_chart(figC, width="stretch")
+    st.info(f"**{kind.삽입구분.iloc[0]}가 1건당 {kind.평균밀림.iloc[0]:.2f}일**로 가장 크게 민다. "
+            f"다만 건수는 **{kind.sort_values('총밀림일', ascending=False).삽입구분.iloc[0]}**가 많아 "
+            f"총 밀림일은 {kind.sort_values('총밀림일', ascending=False).총밀림일.iloc[0]}일로 더 크다 — "
+            "**1건당 충격이 큰 것과 전체 손실이 큰 것은 다르다.** 줄일 대상은 후자, 예방할 대상은 전자.")
+    st.caption(f"※ 삽입 이력은 {len(insr)}건으로 표본이 작다(confidence 낮음). "
+               "또 도번 정보가 없어 **월 단위로만** 다른 데이터와 결합된다 — 특정 수주가 이 삽입 때문에 밀렸는지는 알 수 없다.")
+
+    st.success("**결론** ① 먼저 손볼 것은 **A(발주 예보 안정화)** — 영향이 가장 크고, 설비 증설로는 줄지 않는다 "
+               "② B는 리드타임 자체보다 **P90 꼬리**(악화 시 추가 5일)를 줄이는 문제 "
+               "③ C는 총량은 작지만 **기록이 없으면 원인 규명이 불가능**하므로 수집부터 시작 "
+               "· *confidence: A 중간 / B 중간 / C 낮음 — 절대 일수는 실데이터 재계산 필요*")
