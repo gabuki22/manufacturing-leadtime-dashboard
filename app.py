@@ -501,6 +501,12 @@ if page == "equip":
                "주황 점선은 **모든 호기가 함께 움직인 몫**(중앙값) — 이 선을 크게 넘어선 호기만 그 설비 고유의 문제로 본다. "
                "선을 못 넘으면 그 호기를 뜯어도 전체 불량률은 그대로다.")
 
+    # ★ 아래 "점검 우선순위 ②"가 쓰는 값 — 문구가 '공통 상승분을 빼도'라고 말하므로
+    #    계산도 변화량−중앙값이어야 한다. 예전엔 불량률 '수준'(가중평균) 상위를 썼는데
+    #    문구와 계산이 어긋났다(2026-08-01 점검에서 적발: 문구는 L5·L6인데 계산은 L4·QC2를 냈다).
+    _excess = (delta - _med).drop(labels=[h for h in _small if h in delta.index],
+                                  errors="ignore").sort_values(ascending=False)
+
     with st.expander(f"📈 월별 추이 원본 보기 ({first} ~ {last} · 월 {len(piv.columns)}점)"):
         figL = go.Figure()
         _hi = _top2 | _small          # 악화 상위 2 + 표본 작은 호기만 색·이름, 나머지는 배경 회색
@@ -525,7 +531,8 @@ if page == "equip":
                    "다만 이 판정은 3개월(월 3점)에 기댄 것이라 **추세라고 부르기엔 짧다**. 표본을 더 쌓은 뒤 재판정해야 한다.")
 
     st.success(f"**점검 우선순위** ① {'공통 원인 조사' if _share >= 0.7 else '개별 설비 점검'}(악화 {worsened}/{compared}대) — *confidence 낮음~중간, 월 3점이라 추세 판정엔 부족* "
-               f"② {' · '.join(g[~g.호기.isin(small.호기)].호기.head(2).tolist())} — 공통 상승분을 빼도 가장 큼 "
+               f"② {' · '.join(_excess.head(2).index)} — **공통 상승분(중앙값 {_med:+.2f}%p)을 빼고도** 초과 폭이 가장 큼"
+               f"({_excess.iloc[0]:+.2f}·{_excess.iloc[1]:+.2f}%p) "
                f"③ {' · '.join(small.호기.tolist()) if len(small) else '없음'} — 관측만, 판정 보류")
 
 # ══════════════════════════════════════════════════════════════════════
