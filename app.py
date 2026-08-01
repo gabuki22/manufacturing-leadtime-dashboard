@@ -469,15 +469,48 @@ if page == "equip":
     piv = eq.pivot_table(index="호기", columns="월", values="불량수량", aggfunc="sum") / \
           eq.pivot_table(index="호기", columns="월", values="투입", aggfunc="sum") * 100
     first, last = piv.columns[0], piv.columns[-1]
-    piv = piv.sort_values(last, ascending=False)
+    # 선 11개가 3~6% 구간에 엉켜 읽히지 않았다(2026-08-01 지적). 이 절의 질문은 '수준'이 아니라
+    # '누가 얼마나 나빠졌나'(변화)라서, 변화량 막대 하나로 답한다. 원본 추이는 아래 펼침에 보존.
+    # ⚠️ 비교 정의는 위 지표(악화 N/M)와 **반드시 같아야** 한다 — 첫 월 vs 이후 전체 통합.
+    #    '첫 월 vs 마지막 월'로 재면 7/10이 나와 같은 화면에서 6/10과 모순된다(2026-08-01 실제로 걸림).
+    delta = ((_after[_common] - _before[_common]) * 100).sort_values()
+    _b100, _a100 = _before * 100, _after * 100
+    _small = set(small.호기)
+    _med = float(delta.median())
+    _top2 = set(delta.tail(2).index)
     figT = go.Figure()
-    for h in piv.index:
-        vals = piv.loc[h]
-        figT.add_scatter(x=list(piv.columns), y=vals, mode="lines+markers", name=h,
-                         line=dict(width=3 if h in small.호기.values or h == worst else 1.5,
-                                   color="crimson" if h == worst else None))
-    figT.update_layout(height=400, yaxis_title="불량률 (%)", legend=dict(orientation="h", y=-0.15))
+    figT.add_bar(x=delta.values, orientation="h",
+                 y=[f"{h} ⚠️표본작음" if h in _small else h for h in delta.index],
+                 text=[f"{v:+.2f}%p" for v in delta.values], textposition="outside", cliponaxis=False,
+                 marker_color=["crimson" if v > 0 else "lightslategray" for v in delta.values],
+                 customdata=[[_b100[h], _a100[h]] for h in delta.index],
+                 hovertemplate="%{y}<br>%{customdata[0]:.2f}%% → %{customdata[1]:.2f}%%<extra></extra>",
+                 showlegend=False)
+    figT.add_vline(x=_med, line=dict(color="#F5A85B", dash="dot"),
+                   annotation_text=f"전체 공통 이동분(중앙값) {_med:+.2f}%p", annotation_position="top")
+    figT.update_layout(height=420, yaxis_title="",
+                       xaxis_title=f"불량률 변화 (%p) · 첫 월 {first} → 이후 전체 통합")
     st.plotly_chart(figT, width="stretch")
+    st.caption(f"비교 기준 = **첫 월({first}) vs 이후 전체 통합** — 위 '악화 {worsened}/{compared}' 지표와 같은 정의다. "
+               "(마지막 월 하나만 떼어 비교하면 숫자가 달라진다 — 같은 화면에서 정의가 갈리면 안 된다.) "
+               "**빨강 = 나빠진 호기 · 회색 = 좋아진 호기**, 막대 길이가 변화 크기다. "
+               "주황 점선은 **모든 호기가 함께 움직인 몫**(중앙값) — 이 선을 크게 넘어선 호기만 그 설비 고유의 문제로 본다. "
+               "선을 못 넘으면 그 호기를 뜯어도 전체 불량률은 그대로다.")
+
+    with st.expander(f"📈 월별 추이 원본 보기 ({first} ~ {last} · 월 {len(piv.columns)}점)"):
+        figL = go.Figure()
+        _hi = _top2 | _small          # 악화 상위 2 + 표본 작은 호기만 색·이름, 나머지는 배경 회색
+        for h in piv.index:
+            on = h in _hi
+            figL.add_scatter(x=[str(c) for c in piv.columns], y=piv.loc[h], mode="lines+markers",
+                             name=h, showlegend=on, opacity=1.0 if on else 0.3,
+                             line=dict(width=3 if on else 1,
+                                       color=("crimson" if h in _top2 else "#F5A85B") if on else "#6B7684"))
+        figL.update_layout(height=360, yaxis_title="불량률 (%)", xaxis_type="category",
+                           legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(figL, width="stretch")
+        st.caption("이름을 단 선은 **악화 상위 2개 + 표본이 작은 호기**뿐이고 나머지 회색 선은 배경이다. "
+                   f"월 {len(piv.columns)}점이라 선의 기울기를 추세로 읽지 않는다.")
     if _share >= 0.7:
         st.error(f"**{worsened}/{compared} 호기가 함께 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
                  "특정 설비 고장이라면 한둘만 튀어야 하는데 대부분이 같이 올랐다 — **자재 로트·환경·작업조건 같은 공통 원인**을 먼저 의심해야 한다. "
