@@ -372,13 +372,16 @@ if page == "qual":
 
 if page == "equip":
     st.caption("호기별 투입 대비 손실로 **점검 우선순위**를 정한다. 순위표 하나로 끝내지 않고 "
-               "**가중평균·표본·공통원인** 세 관문을 통과시킨다 — 셋 중 하나만 빠져도 엉뚱한 설비를 뜯게 된다.")
+               "**가중평균·표본·공통원인 여부** 세 관문을 통과시킨다 — 셋 중 하나만 빠져도 엉뚱한 설비를 뜯게 된다.")
     st.info("**측정 대상이 품질·불량 탭과 다르다.** 여기는 `투입 대비 손실`(공정 단위)이고, "
             "품질 탭 ③의 '호기라인 변별력 없음'은 `검사에서 판정된 제품 불량`(defect_detail) 기준이다. "
             "서로 다른 질문에 답하는 두 데이터라 결론이 달라도 모순이 아니다. "
             "불량률 정의 = **불량수량 ÷ 투입**(재작업 제외) — 원본이 쓰는 정의와 대조해 확정했다.")
 
     eq = load("equipment_production")
+    st.caption(f"데이터: {eq.월.min()} ~ {eq.월.max()} ({eq.월.nunique()}개월) · "
+               f"투입·양품은 기존 작업일보 실제 집계와 **3개월 전부 대조 검증 통과**(30/30) · "
+               f"손실의 재작업/불량 분해는 합성")
     tot_in, tot_def = int(eq.투입.sum()), int(eq.불량수량.sum())
     by_m = eq.groupby("월").apply(lambda g: g.불량수량.sum() / g.투입.sum() * 100)
     _rate = lambda d: d.groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())
@@ -390,7 +393,11 @@ if page == "equip":
     c1, c2, c3 = st.columns(3)
     c1.metric("총 투입 / 불량", f"{tot_in:,}개", f"불량 {tot_def:,}개 ({tot_def/tot_in*100:.2f}%)")
     c2.metric("불량률 추세", f"{by_m.iloc[-1]:.2f}%", f"{by_m.iloc[-1]-by_m.iloc[0]:+.2f}%p (3개월)")
-    c3.metric("동시 악화 호기", f"{worsened} / {compared}", "첫 월에 없던 신규 호기는 비교 제외", delta_color="inverse")
+    _share = worsened / compared if compared else 0
+    c3.metric("악화된 호기", f"{worsened} / {compared}",
+              ("과반이 함께 악화 — 공통 원인 의심" if _share >= 0.7 else
+               "일부만 악화 — 개별 설비 쪽" if _share < 0.5 else "절반 안팎 — 판단 보류"),
+              delta_color="inverse")
 
     st.subheader("① 순위를 정하는 방법이 결론을 바꾼다 (가중평균 vs 단순평균)")
     ref_badge("가중평균 — 로트 크기가 다르면 단순 평균이 작은 로트를 과대 반영(제조 통계의 기본)")
@@ -444,11 +451,16 @@ if page == "equip":
                                    color="crimson" if h == worst else None))
     figT.update_layout(height=400, yaxis_title="불량률 (%)", legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(figT, width="stretch")
-    st.error(f"**{worsened}/{compared} 호기가 동시에 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
-             "특정 설비 고장이라면 한둘만 튀어야 하는데 전부 같이 올랐다 — **자재 로트·환경·작업조건 같은 공통 원인**을 먼저 의심해야 한다. "
-             "순위표만 보고 1위 설비를 뜯으면, 뜯고 나서도 나머지 호기의 불량률은 그대로다.")
+    if _share >= 0.7:
+        st.error(f"**{worsened}/{compared} 호기가 함께 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
+                 "특정 설비 고장이라면 한둘만 튀어야 하는데 대부분이 같이 올랐다 — **자재 로트·환경·작업조건 같은 공통 원인**을 먼저 의심해야 한다. "
+                 "순위표만 보고 1위 설비를 뜯으면, 뜯고 나서도 나머지 호기의 불량률은 그대로다.")
+    else:
+        st.warning(f"**{worsened}/{compared} 호기만 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
+                   "과반이 함께 움직이지 않았으므로 **공통 원인이라고 말할 근거는 약하다** — 개별 설비 쪽을 먼저 본다. "
+                   "다만 이 판정은 3개월(월 3점)에 기댄 것이라 **추세라고 부르기엔 짧다**. 표본을 더 쌓은 뒤 재판정해야 한다.")
 
-    st.success(f"**점검 우선순위** ① 공통 원인 조사(동시 악화 {worsened}대) — *confidence 중간, 상관은 명확하나 원인 미확인* "
+    st.success(f"**점검 우선순위** ① {'공통 원인 조사' if _share >= 0.7 else '개별 설비 점검'}(악화 {worsened}/{compared}대) — *confidence 낮음~중간, 월 3점이라 추세 판정엔 부족* "
                f"② {' · '.join(g[~g.호기.isin(small.호기)].호기.head(2).tolist())} — 공통 상승분을 빼도 가장 큼 "
                f"③ {' · '.join(small.호기.tolist()) if len(small) else '없음'} — 관측만, 판정 보류")
 
