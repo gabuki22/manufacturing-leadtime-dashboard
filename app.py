@@ -70,20 +70,41 @@ else:
     st.caption(f"🟡 **스냅샷 데이터 ({_snap_date} 기준)** — 배포 환경에 BigQuery 인증 정보가 없어 그 시점 데이터로 표시 중 · 인증 없어도 정상 렌더(배포 안전)")
 st.divider()
 
-tab_var, tab_diag, tab_plan, tab_order, tab_qual, tab_equip, tab_report = st.tabs(
-    ["⚡ 변동 대응 — 무엇이 납기를 흔드나",
-     "🩺 납기 진단 — 왜 못 맞추나", "🗓️ 공정별 계획서 — 오늘 뭘 하나",
-     "📅 수주 납기 진단 — 애초에 가능한가", "🔬 품질·불량 분석 — 진짜 원인은 무엇인가",
-     "⚙️ 설비 불량 — 어느 호기를 먼저 점검하나",
-     "📄 리포트 — 결론"])
+# ── 왼쪽 사이드바 네비게이션 (탭 7개가 가로로 넘쳐 스크롤되던 문제 해소)
+PAGES = {
+    "var": "⚡ 변동 대응",
+    "diag": "🩺 납기 진단",
+    "plan": "🗓️ 공정별 계획서",
+    "order": "📅 수주 납기 진단",
+    "qual": "🔬 품질·불량 분석",
+    "equip": "⚙️ 설비 불량",
+    "report": "📄 리포트",
+}
+SUBTITLE = {
+    "var": "무엇이 납기를 흔드나",
+    "diag": "왜 못 맞추나",
+    "plan": "오늘 뭘 하나",
+    "order": "애초에 가능한가",
+    "qual": "진짜 원인은 무엇인가",
+    "equip": "어느 호기를 먼저 점검하나",
+    "report": "결론",
+}
+with st.sidebar:
+    st.markdown("### 🏭 제조 대시보드")
+    st.caption("사출 → 지그삽입 → 도장 → 레이저 → 인쇄 → 출하검사")
+    _sel = st.radio("메뉴", list(PAGES.values()), label_visibility="collapsed")
+    st.divider()
+    st.caption(f"**{_sel}**  \n{SUBTITLE[[k for k, v in PAGES.items() if v == _sel][0]]}")
+    st.caption("데이터 전부 가공(합성) · 작성자 이기쁨")
+page = [k for k, v in PAGES.items() if v == _sel][0]
 
-with tab_report:
+if page == "report":
     reports.render_mfg_report(load)
 
 # ══════════════════════════════════════════════════════════════════════
 # 탭1. 납기 진단 — 왜 못 맞추나 (6차트)
 # ══════════════════════════════════════════════════════════════════════
-with tab_diag:
+if page == "diag":
     do, jig_m, inv = load("daily_output"), load("jig_master"), load("inventory")
     lt, dd, ri, pg = load("lot_trace"), load("defect_detail"), load("resource_inventory"), load("paint_grouping")
 
@@ -168,7 +189,7 @@ with tab_diag:
 # ══════════════════════════════════════════════════════════════════════
 # 탭2. 공정별 계획서 — 오늘 뭘 하나
 # ══════════════════════════════════════════════════════════════════════
-with tab_plan:
+if page == "plan":
     plans = load("plan_backward_전체")
     jig = load("plan_공정_지그삽입_로딩배분")
     mat = load("plan_자재소요")
@@ -251,7 +272,7 @@ with tab_plan:
 # ══════════════════════════════════════════════════════════════════════
 # 탭3. 수주 납기 진단 — 애초에 가능한가
 # ══════════════════════════════════════════════════════════════════════
-with tab_order:
+if page == "order":
     diag = load("plan_수주납기진단")
     st.caption("영업이 확보한 기간(**수주일 → 출하납기**)이 **전 공정 필요 리드타임**보다 짧으면 생산은 시작부터 진다. "
                "접수 시점에 이미 불가능한 납기를 색출한다.")
@@ -296,7 +317,7 @@ with tab_order:
 # ══════════════════════════════════════════════════════════════════════
 # 탭4. 품질·불량 분석 — 진짜 원인은 무엇인가 (통계로 오판 방지)
 # ══════════════════════════════════════════════════════════════════════
-with tab_qual:
+if page == "qual":
     st.caption("불량의 진짜 원인을 통계로 가린다 — **사람인가 상황인가**, **고객사인가 색상인가**. "
                "집계 숫자 하나로 갈구지 않고 유의성·층화·세그로 오판을 막는다.")
 
@@ -349,7 +370,7 @@ with tab_qual:
     st.warning("**색상 축이 변별력 2.2배로 최고**(블랙). 불량 '수량'이 아니라 **'률'로 쪼개니** 물량 착시가 걷힌다 — "
                "PPM 개선은 색상(블랙)부터. 호기라인(1.0배)은 변별력 없음 = 불량 원인 아님.")
 
-with tab_equip:
+if page == "equip":
     st.caption("호기별 투입 대비 손실로 **점검 우선순위**를 정한다. 순위표 하나로 끝내지 않고 "
                "**가중평균·표본·공통원인** 세 관문을 통과시킨다 — 셋 중 하나만 빠져도 엉뚱한 설비를 뜯게 된다.")
     st.info("**측정 대상이 품질·불량 탭과 다르다.** 여기는 `투입 대비 손실`(공정 단위)이고, "
@@ -360,13 +381,16 @@ with tab_equip:
     eq = load("equipment_production")
     tot_in, tot_def = int(eq.투입.sum()), int(eq.불량수량.sum())
     by_m = eq.groupby("월").apply(lambda g: g.불량수량.sum() / g.투입.sum() * 100)
-    worsened = (eq[eq.월 != eq.월.min()].groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())
-                > eq[eq.월 == eq.월.min()].groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())).sum()
+    _rate = lambda d: d.groupby("호기").apply(lambda g: g.불량수량.sum() / g.투입.sum())
+    _first = eq.월.min()
+    _before, _after = _rate(eq[eq.월 == _first]), _rate(eq[eq.월 != _first])
+    _common = _before.index.intersection(_after.index)   # 첫 월에 없는 신규 호기는 비교 대상에서 제외
+    worsened, compared = int((_after[_common] > _before[_common]).sum()), len(_common)
 
     c1, c2, c3 = st.columns(3)
     c1.metric("총 투입 / 불량", f"{tot_in:,}개", f"불량 {tot_def:,}개 ({tot_def/tot_in*100:.2f}%)")
     c2.metric("불량률 추세", f"{by_m.iloc[-1]:.2f}%", f"{by_m.iloc[-1]-by_m.iloc[0]:+.2f}%p (3개월)")
-    c3.metric("동시 악화 호기", f"{int(worsened)} / {eq.호기.nunique()}", "특정 설비 아닌 공통 원인 신호", delta_color="inverse")
+    c3.metric("동시 악화 호기", f"{worsened} / {compared}", "첫 월에 없던 신규 호기는 비교 제외", delta_color="inverse")
 
     st.subheader("① 순위를 정하는 방법이 결론을 바꾼다 (가중평균 vs 단순평균)")
     ref_badge("가중평균 — 로트 크기가 다르면 단순 평균이 작은 로트를 과대 반영(제조 통계의 기본)")
@@ -420,18 +444,18 @@ with tab_equip:
                                    color="crimson" if h == worst else None))
     figT.update_layout(height=400, yaxis_title="불량률 (%)", legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(figT, width="stretch")
-    st.error(f"**{int(worsened)}/{eq.호기.nunique()} 호기가 동시에 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
+    st.error(f"**{worsened}/{compared} 호기가 동시에 악화**됐다({by_m.iloc[0]:.2f}% → {by_m.iloc[-1]:.2f}%). "
              "특정 설비 고장이라면 한둘만 튀어야 하는데 전부 같이 올랐다 — **자재 로트·환경·작업조건 같은 공통 원인**을 먼저 의심해야 한다. "
              "순위표만 보고 1위 설비를 뜯으면, 뜯고 나서도 나머지 호기의 불량률은 그대로다.")
 
-    st.success(f"**점검 우선순위** ① 공통 원인 조사(동시 악화 {int(worsened)}대) — *confidence 중간, 상관은 명확하나 원인 미확인* "
+    st.success(f"**점검 우선순위** ① 공통 원인 조사(동시 악화 {worsened}대) — *confidence 중간, 상관은 명확하나 원인 미확인* "
                f"② {' · '.join(g[~g.호기.isin(small.호기)].호기.head(2).tolist())} — 공통 상승분을 빼도 가장 큼 "
                f"③ {' · '.join(small.호기.tolist()) if len(small) else '없음'} — 관측만, 판정 보류")
 
 # ══════════════════════════════════════════════════════════════════════
 # 탭0. 변동 대응 — 나의 분석 워크플로우 Define에 직접 답하는 페이지
 # ══════════════════════════════════════════════════════════════════════
-with tab_var:
+if page == "var":
     st.markdown("### ❓ 우리 납기를 실제로 흔드는 변동은 셋 중 무엇이고, 각각에 대응할 시간이 얼마나 남아 있는가?")
     st.caption("계획을 흔드는 변수 셋 — **A 발주 변동**(주 단위 접수량이 크게 출렁) · **B 리드타임 변동**(자재·설비 문제 시 길어짐) · "
                "**C 계획 외 삽입**(품질 대체품·개발품이 계획과 무관하게 끼어듦). "
