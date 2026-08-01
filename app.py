@@ -563,7 +563,8 @@ if page == "var":
              "★같은 계산이 v1 합성(척도 미보정)에서는 A>B>C였다 — **파라미터가 결론을 지배**하므로 실데이터 재계산이 최종 판정이다.")
 
     st.subheader("② A — 발주 예보가 흔들리면 착수가 늦어진다")
-    ref_badge("층화 비교 — 변동성 3분위로 나눠 다른 조건을 고르게 만든 뒤 비교(교란변수 통제)")
+    ref_badge("층화 비교(교란변수 통제) — **3주차 기법 재사용**(심슨의 역설·교란층화: UC버클리 Science 1975 · HomeAway A/B) · "
+              "정식 가설검증(H1)은 **5주차 범위** — 이 차트는 방향 확인용")
     figA = make_subplots(rows=1, cols=2, subplot_titles=("착수 리드타임 (접수→착수)", "착수 시점 남은 여유"))
     figA.add_bar(x=fcq.변동성구간, y=fcq.착수LT.round(1), text=fcq.착수LT.round(1),
                  marker_color=["lightslategray", "lightslategray", "crimson"], row=1, col=1, showlegend=False)
@@ -600,7 +601,8 @@ if page == "var":
            if pd.notna(vsum.get("삽입겹침초과율")) else "겹침 표본 부족")
     st.caption(f"※ 삽입 {len(insr)}건(confidence 낮음). **P1(8/1)로 도번 확보 → 수주 단위 결합 가능**: {_ov}. "
                f"창 3개월 표본이라 방향 참고용. · **P2 전달률 {vsum.전달률:.2f}**(주별 접수 CV {vsum.접수CV:.2f} → 납기 CV {vsum.납기CV:.2f}) — "
-               f"{'1 미만 = 납기 분산이 완충' if vsum.전달률 < 1 else '1 이상 = 몰림이 증폭'} · 합성 납기 가정 위의 값")
+               f"{'1 미만 = 납기 분산이 완충' if vsum.전달률 < 1 else '1 이상 = 몰림이 증폭'} · 합성 납기 가정 위의 값 · "
+               "**지표 정식 설계(Model)는 5주차** — 여기선 초안 계산")
 
     st.subheader("④ 이 숫자를 믿어도 되는가 (Validate)")
     ref_badge("겹치는 구간 대조 — 새 데이터를 기존 시스템에 붙이기 전에 양쪽에 있는 기간으로 값을 맞춰본다")
