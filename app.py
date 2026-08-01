@@ -3,7 +3,7 @@
 
 강의 실습(CS)은 걷어낸 실무 전용. 각 기법에 검증 출처 배지를 달았다(대기업 기술블로그·학술 원전).
 탭(사이드바 = 배운 시간순): 납기 진단 / 공정별 계획서 / 수주 납기 진단 / 품질·불량 분석 /
-리포트 / 설비 불량 / 변동 대응
+리포트 / 원가 전가 / 설비 불량 / 변동 대응
 데이터 전부 가공(합성). 대부분은 BigQuery 원천 → 스냅샷(make_snapshot.py)이지만,
 4주차 Day5 산출물(변동 대응·설비 불량)은 로컬 생성기가 만든 CSV라 BigQuery를 거치지 않는다.
 """
@@ -87,6 +87,7 @@ PAGES = {  # 시간순(강의 진도 오름차순) 정렬 — 2026-08-01 기쁨�
     "order": "📅 수주 납기 진단",
     "qual": "🔬 품질·불량 분석",
     "report": "📄 리포트",
+    "cost": "💰 원가 전가",
     "equip": "⚙️ 설비 불량",
     "var": "⚡ 변동 대응",
 }
@@ -96,6 +97,7 @@ SUBTITLE = {
     "plan": "오늘 뭘 하나",
     "order": "애초에 가능한가",
     "qual": "진짜 원인은 무엇인가",
+    "cost": "왜 원가만 오르고 판가는 못 받나",
     "equip": "어느 호기를 먼저 점검하나",
     "report": "결론",
 }
@@ -106,6 +108,7 @@ WEEK = {
     "plan": ("2주차 Day5", "납기 역산 · 유한능력 계획 · 공정 BOM"),
     "order": ("2주차 Day5", "수주 가능성 사전 진단(역산 기반)"),
     "qual": ("3주차 Day2~3", "p-value 유의성 · 심슨의 역설 · 다축 세그멘테이션"),
+    "cost": ("4주차 Day2", "이벤트 테이블 설계 · 정합성 8규칙 · source of truth 선언"),
     "equip": ("4주차 Day4", "가중평균 · 표본 하한선 · 공통원인 vs 특수원인"),
     "report": ("3주차 Day4~5", "BLUF · 피라미드 원칙 · confidence 3단계"),
 }
@@ -524,6 +527,81 @@ if page == "equip":
     st.success(f"**점검 우선순위** ① {'공통 원인 조사' if _share >= 0.7 else '개별 설비 점검'}(악화 {worsened}/{compared}대) — *confidence 낮음~중간, 월 3점이라 추세 판정엔 부족* "
                f"② {' · '.join(g[~g.호기.isin(small.호기)].호기.head(2).tolist())} — 공통 상승분을 빼도 가장 큼 "
                f"③ {' · '.join(small.호기.tolist()) if len(small) else '없음'} — 관측만, 판정 보류")
+
+# ══════════════════════════════════════════════════════════════════════
+# 탭. 원가 전가 — 왜 원가만 오르고 판가는 못 받나 (4주차 Day2 설계 테이블)
+# ══════════════════════════════════════════════════════════════════════
+if page == "cost":
+    st.caption(f"🎓 **{WEEK['cost'][0]}** 산출물 · 적용한 기법: {WEEK['cost'][1]}")
+    st.markdown("### ❓ 원가는 올랐는데 판가로는 얼마나 회수했나 — 못 받은 쪽은 어느 항목인가?")
+    st.caption("`product_cost`엔 **총원가만** 있어서 *무엇이 얼마나 올랐는지* 알 수 없었다. "
+               "그래서 **원가 항목이 한 번 바뀐 사건 = 1행**인 이벤트 테이블을 설계(Day2)하고 오늘 생성했다. "
+               "⚠️ 원가의 **정답(source of truth)은 이 이벤트 테이블**이고 `product_cost.총원가`는 편의용 사본이다.")
+
+    cse, pce = load("cost_structure_events"), load("price_change_events")
+    cse["변경일"] = pd.to_datetime(cse.변경일)
+    pce["변경일"] = pd.to_datetime(pce.변경일)
+    up = pce[pce.변경액 > 0]
+    rise = cse[cse.변경액 > 0]
+    _tr = [len(up[(up.제품도번 == r.제품도번) & (up.변경일 >= r.변경일)
+                  & (up.변경일 <= r.변경일 + pd.Timedelta(days=90))]) > 0 for r in rise.itertuples()]
+    rise = rise.assign(전가=_tr)
+    by_item = rise.groupby("원가항목").agg(상승액=("변경액", "sum"), 건수=("변경액", "size"),
+                                        전가율=("전가", "mean")).reset_index()
+    by_item["전가율"] = (by_item.전가율 * 100).round(1)
+    by_item["상승액"] = by_item.상승액.round(1)
+    top_rise = by_item.loc[by_item.상승액.idxmax()]
+    low_pass = by_item.loc[by_item.전가율.idxmin()]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("원가 변경 사건", f"{len(cse):,}건", f"인상 {len(rise)}건 · 도번 {cse.제품도번.nunique()}종")
+    c2.metric(f"상승을 주도한 항목 ({top_rise.원가항목})",
+              f"{top_rise.상승액/by_item.상승액.sum()*100:.0f}%", f"누적 {top_rise.상승액:,.0f}원/개")
+    c3.metric(f"전가가 가장 안 된 항목 ({low_pass.원가항목})", f"{low_pass.전가율:.1f}%",
+              "90일 내 판가 인상이 뒤따른 비율", delta_color="off")
+
+    st.subheader("① 원가는 어느 항목이 올렸나")
+    ref_badge("파레토 — 원인의 소수가 결과의 다수를 만든다(품질관리 기본). 항목 분해 없이 총원가만 보면 대상을 못 고른다")
+    b = by_item.sort_values("상승액", ascending=False)
+    figR = px.bar(b, x="원가항목", y="상승액", text="상승액",
+                  color=["crimson" if x == top_rise.원가항목 else "lightslategray" for x in b.원가항목],
+                  color_discrete_map="identity", labels={"상승액": "누적 인상액 (원/개)"})
+    figR.update_traces(texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False)
+    figR.update_layout(height=330, showlegend=False)
+    st.plotly_chart(figR, width="stretch")
+
+    st.subheader("② 그런데 판가로 회수된 비율은 정반대다")
+    ref_badge("사건 간 시차 매칭 — 원가 인상 후 90일 안에 판가 인상이 뒤따랐는가로 전가 여부를 판정")
+    b2 = by_item.sort_values("전가율")
+    figP = px.bar(b2, x="원가항목", y="전가율", text="전가율",
+                  color=["crimson" if x == low_pass.원가항목 else "seagreen" for x in b2.원가항목],
+                  color_discrete_map="identity", labels={"전가율": "90일 내 판가 인상이 뒤따른 비율 (%)"})
+    figP.update_traces(texttemplate="%{text:.1f}%", textposition="outside", cliponaxis=False)
+    figP.update_layout(height=330, showlegend=False, yaxis_range=[0, 115])
+    st.plotly_chart(figP, width="stretch")
+    st.error(f"**{top_rise.원가항목}가 상승의 {top_rise.상승액/by_item.상승액.sum()*100:.0f}%를 만드는데 "
+             f"전가율은 {low_pass.전가율:.1f}%로 가장 낮다** — 가장 큰 원인에 가장 대응하지 못하고 있다. "
+             "내부 요인(가공비·경비)은 판가 협상 때 함께 올리지만, 재료비는 **공급사 통보가 수시로 와 협상 주기와 어긋난다**. "
+             "→ 처방은 단가 인상 요구가 아니라 **인상 근거를 자재·시점 단위로 문서화해 협상 테이블에 올리는 것**.")
+
+    st.subheader("③ 어느 자재가 몇 개 도번으로 퍼지는가 (협상 우선순위)")
+    ref_badge("파급 범위 — 같은 인상이라도 여러 도번에 걸친 자재부터 다뤄야 회수 효과가 크다")
+    mat = (cse[cse.원가항목 == "재료비"].groupby(["관련자재코드", "공급사"])
+           .agg(파급도번수=("제품도번", "nunique"), 인상액=("변경액", "sum")).reset_index()
+           .sort_values("파급도번수", ascending=False).head(8))
+    figM = px.bar(mat, x="파급도번수", y="관련자재코드", orientation="h", text="파급도번수",
+                  hover_data=["공급사", "인상액"], labels={"파급도번수": "영향 받는 도번 수"})
+    figM.update_traces(marker_color="crimson", textposition="outside", cliponaxis=False)
+    figM.update_layout(height=330, yaxis=dict(autorange="reversed"))
+    st.plotly_chart(figM, width="stretch")
+
+    st.success(f"**결론** — ① 상승 주도 = **{top_rise.원가항목}**({top_rise.상승액:,.0f}원/개 누적) "
+               f"② 회수 실패 = **{low_pass.원가항목}**(전가율 {low_pass.전가율:.1f}%) "
+               f"③ 협상 1순위 = **{mat.iloc[0].관련자재코드}**({mat.iloc[0].공급사} · {int(mat.iloc[0].파급도번수)}개 도번). "
+               f"⚠️ confidence **낮음** — 합성 {len(cse)}건이고 전가 판정 창(90일)은 우리가 정한 가정이다. "
+               "창 길이를 바꾸면 순위가 흔들리는지 5주차에 민감도부터 확인한다.")
+    st.caption("데이터 전부 가공(합성) · 정합성 8규칙 검증 통과(총원가 오차 0.07% · 체인 끊김 0건) · "
+               "설계서: 볼트 `02_data/설계서-cost_structure_events-2026-07-28.md`")
 
 # ══════════════════════════════════════════════════════════════════════
 # 탭0. 변동 대응 — 나의 분석 워크플로우 Define에 직접 답하는 페이지
