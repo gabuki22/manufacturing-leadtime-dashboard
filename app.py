@@ -97,22 +97,36 @@ SUBTITLE = {
     "equip": "어느 호기를 먼저 점검하나",
     "report": "결론",
 }
+# 어느 주차에 무엇을 배워서 만든 화면인지 — 강의 진도와 산출물의 대응 관계
+WEEK = {
+    "var": ("4주차 Day5", "워크플로우 실행 · 변동 요인 분해 · 표본 판단"),
+    "diag": ("2주차 Day3~5", "체인 분석(여부→횟수) · TOC 병목 · 컴포넌트 발상"),
+    "plan": ("2주차 Day5", "납기 역산 · 유한능력 계획 · 공정 BOM"),
+    "order": ("2주차 Day5", "수주 가능성 사전 진단(역산 기반)"),
+    "qual": ("3주차 Day2~3", "p-value 유의성 · 심슨의 역설 · 다축 세그멘테이션"),
+    "equip": ("4주차 Day4", "가중평균 · 표본 하한선 · 공통원인 vs 특수원인"),
+    "report": ("3주차 Day4~5", "BLUF · 피라미드 원칙 · confidence 3단계"),
+}
 with st.sidebar:
     st.markdown("### 🏭 제조 대시보드")
     st.caption("사출 → 지그삽입 → 도장 → 레이저 → 인쇄 → 출하검사")
     _sel = st.radio("메뉴", list(PAGES.values()), label_visibility="collapsed")
     st.divider()
-    st.caption(f"**{_sel}**  \n{SUBTITLE[[k for k, v in PAGES.items() if v == _sel][0]]}")
+    _k = [k for k, v in PAGES.items() if v == _sel][0]
+    st.caption(f"**{_sel}** — {SUBTITLE[_k]}")
+    st.caption(f"🎓 **{WEEK[_k][0]}** 산출물")
     st.caption("데이터 전부 가공(합성) · 작성자 이기쁨")
 page = [k for k, v in PAGES.items() if v == _sel][0]
 
 if page == "report":
+    st.caption(f"🎓 **{WEEK['report'][0]}** 산출물 · 적용한 기법: {WEEK['report'][1]}")
     reports.render_mfg_report(load)
 
 # ══════════════════════════════════════════════════════════════════════
 # 탭1. 납기 진단 — 왜 못 맞추나 (6차트)
 # ══════════════════════════════════════════════════════════════════════
 if page == "diag":
+    st.caption(f"🎓 **{WEEK['diag'][0]}** 산출물 · 적용한 기법: {WEEK['diag'][1]}")
     do, jig_m, inv = load("daily_output"), load("jig_master"), load("inventory")
     lt, dd, ri, pg = load("lot_trace"), load("defect_detail"), load("resource_inventory"), load("paint_grouping")
 
@@ -198,6 +212,7 @@ if page == "diag":
 # 탭2. 공정별 계획서 — 오늘 뭘 하나
 # ══════════════════════════════════════════════════════════════════════
 if page == "plan":
+    st.caption(f"🎓 **{WEEK['plan'][0]}** 산출물 · 적용한 기법: {WEEK['plan'][1]}")
     plans = load("plan_backward_전체")
     jig = load("plan_공정_지그삽입_로딩배분")
     mat = load("plan_자재소요")
@@ -281,6 +296,7 @@ if page == "plan":
 # 탭3. 수주 납기 진단 — 애초에 가능한가
 # ══════════════════════════════════════════════════════════════════════
 if page == "order":
+    st.caption(f"🎓 **{WEEK['order'][0]}** 산출물 · 적용한 기법: {WEEK['order'][1]}")
     diag = load("plan_수주납기진단")
     st.caption("영업이 확보한 기간(**수주일 → 출하납기**)이 **전 공정 필요 리드타임**보다 짧으면 생산은 시작부터 진다. "
                "접수 시점에 이미 불가능한 납기를 색출한다.")
@@ -326,6 +342,7 @@ if page == "order":
 # 탭4. 품질·불량 분석 — 진짜 원인은 무엇인가 (통계로 오판 방지)
 # ══════════════════════════════════════════════════════════════════════
 if page == "qual":
+    st.caption(f"🎓 **{WEEK['qual'][0]}** 산출물 · 적용한 기법: {WEEK['qual'][1]}")
     st.caption("불량의 진짜 원인을 통계로 가린다 — **사람인가 상황인가**, **고객사인가 색상인가**. "
                "집계 숫자 하나로 갈구지 않고 유의성·층화·세그로 오판을 막는다.")
 
@@ -379,6 +396,7 @@ if page == "qual":
                "PPM 개선은 색상(블랙)부터. 호기라인(1.0배)은 변별력 없음 = 불량 원인 아님.")
 
 if page == "equip":
+    st.caption(f"🎓 **{WEEK['equip'][0]}** 산출물 · 적용한 기법: {WEEK['equip'][1]}")
     st.caption("호기별 투입 대비 손실로 **점검 우선순위**를 정한다. 순위표 하나로 끝내지 않고 "
                "**가중평균·표본·공통원인 여부** 세 관문을 통과시킨다 — 셋 중 하나만 빠져도 엉뚱한 설비를 뜯게 된다.")
     st.info("**측정 대상이 품질·불량 탭과 다르다.** 여기는 `투입 대비 손실`(공정 단위)이고, "
@@ -476,6 +494,7 @@ if page == "equip":
 # 탭0. 변동 대응 — 나의 분석 워크플로우 Define에 직접 답하는 페이지
 # ══════════════════════════════════════════════════════════════════════
 if page == "var":
+    st.caption(f"🎓 **{WEEK['var'][0]}** 산출물 · 적용한 기법: {WEEK['var'][1]}")
     st.markdown("### ❓ 우리 납기를 실제로 흔드는 변동은 셋 중 무엇이고, 각각에 대응할 시간이 얼마나 남아 있는가?")
     st.caption("계획을 흔드는 변수 셋 — **A 발주 변동**(주 단위 접수량이 크게 출렁) · **B 리드타임 변동**(자재·설비 문제 시 길어짐) · "
                "**C 계획 외 삽입**(품질 대체품·개발품이 계획과 무관하게 끼어듦). "
