@@ -38,8 +38,16 @@ st.set_page_config(page_title="제조 납기·품질 실무 대시보드", page_
 
 
 @st.cache_data
+def _read_csv(path: str, _mtime: float) -> pd.DataFrame:
+    """_mtime은 캐시 키 전용 인자다. 파일이 바뀌면 값이 달라져 캐시가 자동 무효화된다."""
+    return pd.read_csv(path)
+
+
 def load(name: str) -> pd.DataFrame:
-    return pd.read_csv(DATA / f"{name}.csv")
+    """CSV 로더. ⚠️ 파일명만 캐시 키로 쓰면 데이터를 갱신해도 옛 내용이 계속 나온다
+    (2026-08-01 실제로 겪음 — 재배포로 코드는 바뀌었는데 CSV는 구버전 표시)."""
+    p = DATA / f"{name}.csv"
+    return _read_csv(str(p), p.stat().st_mtime)
 
 
 @st.cache_resource
